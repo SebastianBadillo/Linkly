@@ -19,6 +19,16 @@ services:
       retries: 10
     # No "ports:" on purpose: only the app talks to Postgres, over the Compose network.
 
+  valkey:
+    image: valkey/valkey:8-alpine
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]   # answers PONG when ready
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No volume: it's a cache. Losing it on restart is fine, Postgres has the real data.
+    # No "ports:" either: only the app talks to it.
+
   app:
     build: ./backend
     environment:
@@ -27,11 +37,14 @@ services:
       DB_USER: ${POSTGRES_USER:-linkly}
       DB_PASSWORD: ${POSTGRES_PASSWORD:-linkly}
       LINKLY_BASE_URL: ${LINKLY_BASE_URL:-http://localhost:8080}
+      VALKEY_HOST: valkey
     ports:
       - "${APP_PORT:-8080}:8080"   # host:container
     depends_on:
       postgres:
         condition: service_healthy   # wait for pg_isready, not just "container started"
+      valkey:
+        condition: service_healthy   # not strictly needed (we degrade to Postgres), but a cold start shouldn't log warnings
 
 volumes:
   pgdata:

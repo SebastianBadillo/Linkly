@@ -1,6 +1,5 @@
 package io.github.sebastianbadillo.linkly.controller;
 
-import io.github.sebastianbadillo.linkly.entity.Link;
 import io.github.sebastianbadillo.linkly.exception.LinkNotFoundException;
 import io.github.sebastianbadillo.linkly.service.LinkService;
 import org.junit.jupiter.api.Test;
@@ -25,7 +24,7 @@ class RedirectControllerTest {
 
     @Test
     void redirectsWith302AndLocation() throws Exception {
-        when(service.getByCode("bf26")).thenReturn(new Link("bf26", "https://example.com/black-friday"));
+        when(service.resolveTargetUrl("bf26")).thenReturn("https://example.com/black-friday");
 
         mvc.perform(get("/bf26"))
                 .andExpect(status().isFound()) // 302
@@ -34,7 +33,7 @@ class RedirectControllerTest {
 
     @Test
     void unknownCodeReturns404() throws Exception {
-        when(service.getByCode("nope42")).thenThrow(new LinkNotFoundException("nope42"));
+        when(service.resolveTargetUrl("nope42")).thenThrow(new LinkNotFoundException("nope42"));
 
         mvc.perform(get("/nope42"))
                 .andExpect(status().isNotFound());

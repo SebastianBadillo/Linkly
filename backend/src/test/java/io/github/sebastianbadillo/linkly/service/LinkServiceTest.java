@@ -1,5 +1,6 @@
 package io.github.sebastianbadillo.linkly.service;
 
+import io.github.sebastianbadillo.linkly.cache.LinkCache;
 import io.github.sebastianbadillo.linkly.entity.Link;
 import io.github.sebastianbadillo.linkly.exception.AliasTakenException;
 import io.github.sebastianbadillo.linkly.exception.CodeGenerationException;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -23,6 +25,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -43,12 +47,14 @@ class LinkServiceTest {
     private LinkRepository repository;
     @Mock
     private ShortCodeGenerator generator;
+    @Mock
+    private LinkCache cache;
 
     private LinkService service;
 
     @BeforeEach
     void setUp() {
-        service = new LinkService(repository, generator, new AliasValidator(), new TargetUrlValidator());
+        service = new LinkService(repository, generator, new AliasValidator(), new TargetUrlValidator(), cache);
     }
 
     // --- create with a generated code ---
@@ -173,13 +179,12 @@ class LinkServiceTest {
     void updateChangesOnlyTheTargetUrl() {
         Link link = new Link("bf26", URL);
         when(repository.findByCode("bf26")).thenReturn(Optional.of(link));
+        when(repository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Link result = service.updateTargetUrl("bf26", "https://example.com/cyber-monday");
 
         assertThat(result.getTargetUrl()).isEqualTo("https://example.com/cyber-monday");
         assertThat(result.getCode()).isEqualTo("bf26");
-        // No save() call: inside the transaction, Hibernate's dirty checking writes the change.
-        verify(repository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -216,5 +221,85 @@ class LinkServiceTest {
         assertThatThrownBy(() -> service.delete("nope42"))
                 .isInstanceOf(LinkNotFoundException.class);
         verify(repository, never()).delete(any());
+    }
+
+    // --- cache-aside (redirect hot path) ---
+
+    @Test
+    void secondRedirectIsServedFromCacheWithoutPostgres() {
+        when(cache.get("bf26"))
+                .thenReturn(Optional.empty())  // 1st request: MISS
+                .thenReturn(Optional.of(URL)); // 2nd request: HIT (what the 1st one stored)
+        when(repository.findByCode("bf26")).thenReturn(Optional.of(new Link("bf26", URL)));
+
+        assertThat(service.resolveTargetUrl("bf26")).isEqualTo(URL);
+        assertThat(service.resolveTargetUrl("BF26")).isEqualTo(URL);
+
+        verify(repository, times(1)).findByCode("bf26"); // only the miss reached Postgres
+        verify(cache).putUrl("bf26", URL);
+    }
+
+    @Test
+    void missingCodeIsCachedAsNotFound() {
+        when(cache.get("nope42")).thenReturn(Optional.empty());
+        when(repository.findByCode("nope42")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resolveTargetUrl("nope42"))
+                .isInstanceOf(LinkNotFoundException.class);
+        verify(cache).putNotFound("nope42");
+    }
+
+    @Test
+    void cachedNotFoundMarkerReturns404WithoutPostgres() {
+        when(cache.get("nope42")).thenReturn(Optional.of(LinkCache.NOT_FOUND));
+
+        assertThatThrownBy(() -> service.resolveTargetUrl("nope42"))
+                .isInstanceOf(LinkNotFoundException.class);
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void updateWritesPostgresFirstThenEvicts() {
+        Link link = new Link("bf26", URL);
+        when(repository.findByCode("bf26")).thenReturn(Optional.of(link));
+        when(repository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.updateTargetUrl("bf26", "https://example.com/cyber-monday");
+
+        InOrder order = inOrder(repository, cache); // checks the ORDER of calls, not just that they happened
+        order.verify(repository).saveAndFlush(link);
+        order.verify(cache).evict("bf26");
+    }
+
+    @Test
+    void deleteWritesPostgresFirstThenEvicts() {
+        Link link = new Link("bf26", URL);
+        when(repository.findByCode("bf26")).thenReturn(Optional.of(link));
+
+        service.delete("bf26");
+
+        InOrder order = inOrder(repository, cache);
+        order.verify(repository).delete(link);
+        order.verify(cache).evict("bf26");
+    }
+
+    @Test
+    void createEvictsAfterSavingSoAnOldNotFoundMarkerDisappears() {
+        when(repository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.create(URL, "bf26");
+
+        InOrder order = inOrder(repository, cache);
+        order.verify(repository).saveAndFlush(any());
+        order.verify(cache).evict("bf26");
+    }
+
+    @Test
+    void failedUpdateNeverEvicts() {
+        when(repository.findByCode("nope42")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.updateTargetUrl("nope42", URL))
+                .isInstanceOf(LinkNotFoundException.class);
+        verify(cache, never()).evict(anyString());
     }
 }

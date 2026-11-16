@@ -46,6 +46,19 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
+		<!-- Valkey client + StringValkeyTemplate (the Spring Data Redis API, renamed for Valkey).
+		     Not managed by the Spring Boot BOM, so the version is pinned here. -->
+		<dependency>
+			<groupId>io.valkey.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-valkey</artifactId>
+			<version>2.0.1</version>
+		</dependency>
+		<!-- Lettuce: mature pure-Java client (the starter's default, GLIDE, needs a native library).
+		     Version managed by the Spring Boot BOM. -->
+		<dependency>
+			<groupId>io.lettuce</groupId>
+			<artifactId>lettuce-core</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>

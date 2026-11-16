@@ -23,7 +23,7 @@ public class RedirectController {
     // "/{code}" matches ONE path segment, so /api/links/... and /actuator/health never land here.
     @GetMapping("/{code}")
     public ResponseEntity<Void> redirect(@PathVariable String code) {
-        URI target = URI.create(service.getByCode(code).getTargetUrl());
+        URI target = URI.create(service.resolveTargetUrl(code));
         return ResponseEntity.status(HttpStatus.FOUND).location(target).build();
     }
 }
