@@ -1,0 +1,37 @@
+# Start everything:  docker compose up -d --build
+# Stop:              docker compose down      (add -v to also delete the database volume)
+# Values come from .env (copy .env.example). The part after ":-" is a default for local use only.
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-linkly}
+      POSTGRES_USER: ${POSTGRES_USER:-linkly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-linkly}
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # data survives "down" + "up"
+    healthcheck:
+      # "Do you accept connections?" The app waits for this to pass.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No "ports:" on purpose: only the app talks to Postgres, over the Compose network.
+
+  app:
+    build: ./backend
+    environment:
+      # "postgres" = the service name above. Compose's DNS turns it into the container's IP.
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-linkly}
+      DB_USER: ${POSTGRES_USER:-linkly}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-linkly}
+      LINKLY_BASE_URL: ${LINKLY_BASE_URL:-http://localhost:8080}
+    ports:
+      - "${APP_PORT:-8080}:8080"   # host:container
+    depends_on:
+      postgres:
+        condition: service_healthy   # wait for pg_isready, not just "container started"
+
+volumes:
+  pgdata:
