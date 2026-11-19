@@ -1,5 +1,8 @@
 package io.github.sebastianbadillo.linkly;
 
+import io.github.sebastianbadillo.linkly.apikey.ApiKeyFilter;
+import io.github.sebastianbadillo.linkly.apikey.ApiKeyService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,11 +31,21 @@ class LinkApiIntegrationTest {
 
     @Autowired
     private MockMvc mvc;
+    @Autowired
+    private ApiKeyService apiKeys;
+
+    private String apiKey;
+
+    // A fresh key per test = a fresh, full rate-limit bucket per test.
+    @BeforeEach
+    void createApiKey() {
+        apiKey = apiKeys.create("test").key();
+    }
 
     @Test
     void createRedirectUpdateDelete() throws Exception {
         // create
-        mvc.perform(post("/api/links")
+        mvc.perform(post("/api/links").header(ApiKeyFilter.HEADER, apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"url": "https://example.com/black-friday", "alias": "E2E-Flow"}"""))
@@ -46,7 +59,7 @@ class LinkApiIntegrationTest {
                 .andExpect(header().string("Location", "https://example.com/black-friday"));
 
         // update, then the redirect follows the new target (proves dirty checking really wrote to the DB)
-        mvc.perform(patch("/api/links/e2e-flow")
+        mvc.perform(patch("/api/links/e2e-flow").header(ApiKeyFilter.HEADER, apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"url": "https://example.com/cyber-monday"}"""))
@@ -55,7 +68,7 @@ class LinkApiIntegrationTest {
                 .andExpect(header().string("Location", "https://example.com/cyber-monday"));
 
         // delete, then it is gone
-        mvc.perform(delete("/api/links/e2e-flow"))
+        mvc.perform(delete("/api/links/e2e-flow").header(ApiKeyFilter.HEADER, apiKey))
                 .andExpect(status().isNoContent());
         mvc.perform(get("/e2e-flow"))
                 .andExpect(status().isNotFound());
@@ -66,22 +79,22 @@ class LinkApiIntegrationTest {
         String body = """
                 {"url": "https://example.com", "alias": "e2e-dup"}""";
 
-        mvc.perform(post("/api/links").contentType(MediaType.APPLICATION_JSON).content(body))
+        mvc.perform(post("/api/links").header(ApiKeyFilter.HEADER, apiKey).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated());
-        mvc.perform(post("/api/links").contentType(MediaType.APPLICATION_JSON).content(body))
+        mvc.perform(post("/api/links").header(ApiKeyFilter.HEADER, apiKey).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isConflict());
     }
 
     @Test
     void generatedCodeLinkIsCreatedAndListIsClamped() throws Exception {
-        mvc.perform(post("/api/links")
+        mvc.perform(post("/api/links").header(ApiKeyFilter.HEADER, apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"url": "https://example.com/generated"}"""))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.code").value(matchesPattern("[a-z0-9]{6}")));
 
-        mvc.perform(get("/api/links").param("size", "500"))
+        mvc.perform(get("/api/links").header(ApiKeyFilter.HEADER, apiKey).param("size", "500"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.size").value(100)); // clamped
     }

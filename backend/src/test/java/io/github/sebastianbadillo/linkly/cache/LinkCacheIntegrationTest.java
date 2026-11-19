@@ -2,6 +2,9 @@ package io.github.sebastianbadillo.linkly.cache;
 
 import io.github.sebastianbadillo.linkly.TestcontainersConfiguration;
 import io.valkey.springframework.data.valkey.core.StringValkeyTemplate;
+import io.github.sebastianbadillo.linkly.apikey.ApiKeyFilter;
+import io.github.sebastianbadillo.linkly.apikey.ApiKeyService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,6 +32,16 @@ class LinkCacheIntegrationTest {
     @Autowired
     private MockMvc mvc;
     @Autowired
+    private ApiKeyService apiKeys;
+
+    private String apiKey;
+
+    // A fresh key per test = a fresh, full rate-limit bucket per test.
+    @BeforeEach
+    void createApiKey() {
+        apiKey = apiKeys.create("test").key();
+    }
+    @Autowired
     private StringValkeyTemplate valkey;
 
     @Test
@@ -47,7 +60,7 @@ class LinkCacheIntegrationTest {
         create("cache-upd", "https://example.com/old");
         mvc.perform(get("/cache-upd")).andExpect(header().string("Location", "https://example.com/old"));
 
-        mvc.perform(patch("/api/links/cache-upd")
+        mvc.perform(patch("/api/links/cache-upd").header(ApiKeyFilter.HEADER, apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"url": "https://example.com/new"}"""))
@@ -71,7 +84,7 @@ class LinkCacheIntegrationTest {
     }
 
     private void create(String alias, String url) throws Exception {
-        mvc.perform(post("/api/links")
+        mvc.perform(post("/api/links").header(ApiKeyFilter.HEADER, apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"url": "%s", "alias": "%s"}""".formatted(url, alias)))

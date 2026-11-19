@@ -38,6 +38,9 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-linkly}
       LINKLY_BASE_URL: ${LINKLY_BASE_URL:-http://localhost:8080}
       VALKEY_HOST: valkey
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}   # empty = nobody can create API keys (safe default)
+      RATE_LIMIT_CAPACITY: ${RATE_LIMIT_CAPACITY:-10}
+      RATE_LIMIT_REFILL_SECONDS: ${RATE_LIMIT_REFILL_SECONDS:-6}
     ports:
       - "${APP_PORT:-8080}:8080"   # host:container
     depends_on:
