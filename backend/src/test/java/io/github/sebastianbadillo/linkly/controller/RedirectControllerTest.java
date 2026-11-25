@@ -1,5 +1,6 @@
 package io.github.sebastianbadillo.linkly.controller;
 
+import io.github.sebastianbadillo.linkly.clicks.ClickCounter;
 import io.github.sebastianbadillo.linkly.exception.LinkNotFoundException;
 import io.github.sebastianbadillo.linkly.service.LinkService;
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -21,6 +24,8 @@ class RedirectControllerTest {
 
     @MockitoBean
     private LinkService service;
+    @MockitoBean
+    private ClickCounter clicks;
 
     @Test
     void redirectsWith302AndLocation() throws Exception {
@@ -29,6 +34,7 @@ class RedirectControllerTest {
         mvc.perform(get("/bf26"))
                 .andExpect(status().isFound()) // 302
                 .andExpect(header().string("Location", "https://example.com/black-friday"));
+        verify(clicks).record("bf26");
     }
 
     @Test
@@ -37,5 +43,6 @@ class RedirectControllerTest {
 
         mvc.perform(get("/nope42"))
                 .andExpect(status().isNotFound());
+        verifyNoInteractions(clicks);
     }
 }

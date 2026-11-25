@@ -1,6 +1,7 @@
 package io.github.sebastianbadillo.linkly.service;
 
 import io.github.sebastianbadillo.linkly.cache.LinkCache;
+import io.github.sebastianbadillo.linkly.clicks.ClickCounter;
 import io.github.sebastianbadillo.linkly.entity.Link;
 import io.github.sebastianbadillo.linkly.exception.AliasTakenException;
 import io.github.sebastianbadillo.linkly.exception.CodeGenerationException;
@@ -30,6 +31,7 @@ public class LinkService {
     private final AliasValidator aliasValidator;
     private final TargetUrlValidator urlValidator;
     private final LinkCache cache;
+    private final ClickCounter clicks;
 
     /**
      * NOT @Transactional on purpose. Each saveAndFlush runs in its own small transaction,
@@ -127,5 +129,6 @@ public class LinkService {
         Link link = getByCode(code);
         repository.delete(link);
         cache.evict(link.getCode());
+        clicks.discard(link.getCode()); // after the evict: redirects now get 404 and add no new clicks
     }
 }

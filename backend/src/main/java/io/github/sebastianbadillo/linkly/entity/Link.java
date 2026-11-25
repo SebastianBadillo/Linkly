@@ -40,6 +40,11 @@ public class Link {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    // updatable = false: saving an edited link never writes this column, so an edit can't overwrite
+    // clicks that a flush added in the meantime. Only LinkRepository.addClicks changes it.
+    @Column(nullable = false, updatable = false)
+    private long clicks;
+
     public Link(String code, String targetUrl) {
         this.code = code;
         this.targetUrl = targetUrl;

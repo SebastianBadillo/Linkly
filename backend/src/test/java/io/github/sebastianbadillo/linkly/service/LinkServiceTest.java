@@ -1,6 +1,7 @@
 package io.github.sebastianbadillo.linkly.service;
 
 import io.github.sebastianbadillo.linkly.cache.LinkCache;
+import io.github.sebastianbadillo.linkly.clicks.ClickCounter;
 import io.github.sebastianbadillo.linkly.entity.Link;
 import io.github.sebastianbadillo.linkly.exception.AliasTakenException;
 import io.github.sebastianbadillo.linkly.exception.CodeGenerationException;
@@ -49,12 +50,14 @@ class LinkServiceTest {
     private ShortCodeGenerator generator;
     @Mock
     private LinkCache cache;
+    @Mock
+    private ClickCounter clicks;
 
     private LinkService service;
 
     @BeforeEach
     void setUp() {
-        service = new LinkService(repository, generator, new AliasValidator(), new TargetUrlValidator(), cache);
+        service = new LinkService(repository, generator, new AliasValidator(), new TargetUrlValidator(), cache, clicks);
     }
 
     // --- create with a generated code ---
@@ -278,9 +281,10 @@ class LinkServiceTest {
 
         service.delete("bf26");
 
-        InOrder order = inOrder(repository, cache);
+        InOrder order = inOrder(repository, cache, clicks);
         order.verify(repository).delete(link);
         order.verify(cache).evict("bf26");
+        order.verify(clicks).discard("bf26");
     }
 
     @Test

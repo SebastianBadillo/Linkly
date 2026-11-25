@@ -1,5 +1,6 @@
 package io.github.sebastianbadillo.linkly.controller;
 
+import io.github.sebastianbadillo.linkly.clicks.ClickCounter;
 import io.github.sebastianbadillo.linkly.service.LinkService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,11 +20,13 @@ import java.net.URI;
 public class RedirectController {
 
     private final LinkService service;
+    private final ClickCounter clicks;
 
     // "/{code}" matches ONE path segment, so /api/links/... and /actuator/health never land here.
     @GetMapping("/{code}")
     public ResponseEntity<Void> redirect(@PathVariable String code) {
-        URI target = URI.create(service.resolveTargetUrl(code));
+        URI target = URI.create(service.resolveTargetUrl(code)); // unknown code: throws, nothing counted
+        clicks.record(code); // only touches Valkey, never Postgres; never throws
         return ResponseEntity.status(HttpStatus.FOUND).location(target).build();
     }
 }
